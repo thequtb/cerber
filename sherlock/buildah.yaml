@@ -1,0 +1,23 @@
+build:
+  - ctr=$(buildah from elixir:1.14-alpine)
+  - buildah config --label io.buildah.version=1 $ctr
+  - buildah config --label template=bot $ctr
+  - buildah config --label project=sherlock $ctr
+  - buildah copy $ctr src/ /app/
+  - buildah run $ctr sh -c "cd /app && mix local.hex --force && mix local.rebar --force && mix deps.get && mix compile"
+  - buildah config --workingdir /app $ctr
+  - buildah config --cmd "mix run --no-halt" $ctr
+  - buildah commit $ctr sherlock:latest
+
+run:
+  - podman run --name sherlock -d -e TELEGRAM_BOT_TOKEN=YOUR_TOKEN_HERE sherlock:latest
+
+stop:
+  - podman stop sherlock
+
+logs:
+  - podman logs sherlock
+
+remove:
+  - podman rm -f sherlock || true
+  - podman rmi sherlock:latest || true 
