@@ -12,26 +12,28 @@ defmodule Cerber.Template do
   Creates a new project from a template and records it in the database.
   """
   def create_from_template(params \\ %{}) do
-    # Extract template and project name
-    template = Map.get(params, "template", select_template())
-    project_name = Map.get(params, "project_name", prompt_project_name(template))
+    template = Map.get(params, "template")
+    project_name = Map.get(params, "project_name")
 
-    UI.header("Creating new project '#{project_name}'")
-    UI.info("Using '#{template}' template")
+    t = if template, do: template, else: select_template()
+    p = if project_name, do: project_name, else: prompt_project_name(t)
+
+    UI.header("Creating new project '#{p}'")
+    UI.info("Using '#{t}' template")
 
     # Create project in database
     case DB.create_project(%{
-      name: project_name, 
-      template: template, 
+      name: p, 
+      template: t, 
       version: "0.1.0",
-      config_path: Path.join(["/apps", project_name, "config.yaml"]),
+      config_path: Path.join(["/apps", p, "config.yaml"]),
       status: "new"
     }) do
       {:ok, project} -> 
-        UI.success("Project '#{project_name}' successfully created and added to database.")
+        UI.success("Project '#{p}' successfully created and added to database.")
         
         # Create the actual project files and directories
-        case create_project_structure(project_name, template) do
+        case create_project_structure(p, t) do
           {:ok, proj_dir} ->
             UI.success("Project files created at: #{proj_dir}")
             {:ok, project}

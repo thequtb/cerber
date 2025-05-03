@@ -18,7 +18,12 @@ defmodule Cerber.CLI do
         Template.create_from_template()
         
       ["new" | params] when params != [] ->
-        Template.create_from_template(Template.parse_params(params))
+        parsed = Template.parse_params(params)
+        # Ensure template and project_name are present, prompt if missing
+        template = Map.get(parsed, "template") || Template.__info__(:functions)[:select_template] && Template.select_template() || "base"
+        project_name = Map.get(parsed, "project_name") || Template.__info__(:functions)[:prompt_project_name] && Template.prompt_project_name(template) || "my_#{template}_project"
+        merged = Map.merge(parsed, %{"template" => template, "project_name" => project_name})
+        Template.create_from_template(merged)
         
       # List all projects
       ["list"] ->

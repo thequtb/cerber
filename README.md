@@ -93,27 +93,15 @@ The application uses Dotenvy to load environment variables at runtime following 
 ### Workflow Management
 
 ```bash
-# Lock a branch to prevent changes
-./crbr my_project lock main
+# Create new feature
+./crbr my_project feature add
 
-# Unlock a branch
-./crbr my_project unlock main
+./crbr my_project feature test
 
-# Approve a branch for merging
-./crbr my_project approve feature/new-feature
+./crbr my_project feature commit 
 
-# Set the current branch
-./crbr my_project branch develop
+./crbr my_project feature merge
 
-# Set the current stage
-./crbr my_project stage development
-
-# Assign a project to a developer
-./crbr my_project assign username
-
-# View workflow information
-./crbr my_project workflow
-```
 
 ## Available Templates
 
@@ -132,24 +120,7 @@ Cerber uses PostgreSQL to store project and workflow information:
 - `id`: Primary key
 - `name`: Project name
 - `template`: Template used
-- `version`: Project version
-- `last_built`: Last build timestamp
-- `last_run`: Last run timestamp
-- `config_path`: Path to configuration file
 - `status`: Current status
-
-### Workflows Table
-
-- `id`: Primary key
-- `project_id`: Foreign key to projects table
-- `workflow_type`: Workflow type (e.g., "gitflow")
-- `current_branch`: Current branch
-- `locked_branches`: Array of locked branches
-- `approved_branches`: Array of approved branches
-- `current_stage`: Current stage
-- `assignee`: Developer assigned to the project
-- `last_commit`: Last commit hash
-- `status`: Workflow status
 
 Documentation can be generated with [ExDoc](https://github.com/elixir-lang/ex_doc)
 and published on [HexDocs](https://hexdocs.pm). Once published, the docs can
