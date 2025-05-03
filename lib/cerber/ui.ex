@@ -1,84 +1,142 @@
 defmodule Cerber.UI do
   @moduledoc """
-  UI utilities for Cerber CLI.
+  UI utilities for console output.
   """
   
+  # ANSI colors
+  @reset "\u001b[0m"
+  @bold "\u001b[1m"
+  @green "\u001b[32m"
+  @yellow "\u001b[33m"
+  @red "\u001b[31m"
+  @blue "\u001b[34m"
+  @magenta "\u001b[35m"
+  @cyan "\u001b[36m"
+  
   @doc """
-  Prints a header with a title.
+  Print a header (blue + bold).
   """
-  def header(title) do
-    IO.puts("\n\e[1m\e[36m=== #{title} ===\e[0m")
+  def header(text) do
+    IO.puts("\n#{@blue}#{@bold}#{text}#{@reset}")
   end
   
   @doc """
-  Prints an info message.
+  Print a success message (green).
   """
-  def info(message) do
-    IO.puts(message)
+  def success(text) do
+    IO.puts("#{@green}#{text}#{@reset}")
   end
   
   @doc """
-  Prints a success message.
+  Print a warning message (yellow).
   """
-  def success(message) do
-    IO.puts("\e[32m#{message}\e[0m")
+  def warning(text) do
+    IO.puts("#{@yellow}#{text}#{@reset}")
   end
   
   @doc """
-  Prints a warning message.
+  Print an error message (red).
   """
-  def warning(message) do
-    IO.puts("\e[33m#{message}\e[0m")
+  def error(text) do
+    IO.puts("#{@red}#{text}#{@reset}")
   end
   
   @doc """
-  Prints an error message.
+  Print a command (cyan).
   """
-  def error(message) do
-    IO.puts("\e[31m#{message}\e[0m")
+  def command(text) do
+    IO.puts("#{@cyan}$ #{text}#{@reset}")
   end
   
   @doc """
-  Prints a table row with specified column widths.
+  Print info text (normal color).
+  """
+  def info(text) do
+    IO.puts(text)
+  end
+  
+  @doc """
+  Print output from a command.
+  """
+  def output(text) do
+    if text && text != "" do
+      text
+      |> String.split("\n", trim: true)
+      |> Enum.each(fn line -> IO.puts("  #{line}") end)
+    end
+  end
+  
+  @doc """
+  Print a table row, with padding.
   """
   def table_row(columns, widths) do
-    columns
-    |> Enum.zip(widths)
-    |> Enum.map(fn {col, width} ->
-      col_str = if is_nil(col), do: "", else: to_string(col)
-      String.pad_trailing(col_str, width)
-    end)
+    row = Enum.zip(columns, widths)
+    |> Enum.map(fn {col, width} -> String.pad_trailing(col, width) end)
     |> Enum.join(" | ")
-    |> then(&IO.puts("| #{&1} |"))
+    
+    IO.puts("| #{row} |")
   end
   
   @doc """
-  Prints a table separator line.
+  Print a table separator row.
   """
   def table_separator(widths) do
-    widths
-    |> Enum.map(fn width -> String.duplicate("-", width) end)
+    separator = Enum.map(widths, fn width -> String.duplicate("-", width) end)
     |> Enum.join("-+-")
-    |> then(&IO.puts("+-#{&1}-+"))
+    
+    IO.puts("+-#{separator}-+")
   end
   
   @doc """
-  Prompts the user for input with a default value.
+  Ask for confirmation with yes/no.
+  Returns true if the user confirms, false otherwise.
   """
-  def prompt(message, default \\ "") do
-    default_display = if default != "", do: " [#{default}]", else: ""
-    IO.gets("#{message}#{default_display}: ")
+  def confirm(message) do
+    response = IO.gets("#{@yellow}#{message} [y/N]: #{@reset}")
     |> String.trim()
-    |> then(fn input ->
-      if input == "", do: default, else: input
-    end)
+    |> String.downcase()
+    
+    response == "y" || response == "yes"
   end
   
   @doc """
-  Prompts the user to select an option from a list.
+  Ask for user input with a prompt.
+  Returns the user's input as a string.
   """
-  def select(message, options) do
-    IO.puts("\n#{message}:")
+  def prompt(message) do
+    IO.gets("#{@magenta}#{message}: #{@reset}")
+    |> String.trim()
+  end
+  
+  @doc """
+  Ask for user input with a prompt and a default value.
+  Returns the user's input or the default if no input is provided.
+  """
+  def prompt_with_default(message, default) do
+    input = IO.gets("#{@magenta}#{message} [#{default}]: #{@reset}")
+    |> String.trim()
+    
+    if input == "", do: default, else: input
+  end
+  
+  @doc """
+  Select an item from a list with a prompt.
+  """
+  def select_from_list(prompt, options) do
+    if options == [] do
+      IO.puts("\n#{@magenta}#{prompt}#{@reset}")
+      IO.puts("\n#{@yellow}No options available#{@reset}")
+      nil
+    else
+      select(prompt, options)
+    end
+  end
+  
+  @doc """
+  Display a selection menu and return the selected option.
+  """
+  def select(prompt, options) do
+    IO.puts("\n#{@magenta}#{prompt}#{@reset}")
     
     options
     |> Enum.with_index(1)
@@ -86,39 +144,15 @@ defmodule Cerber.UI do
       IO.puts("  #{index}. #{option}")
     end)
     
-    selected = 
-      IO.gets("\nEnter your choice (1-#{length(options)}): ")
-      |> String.trim()
-      |> Integer.parse()
-      |> case do
-        {num, _} when num > 0 and num <= length(options) ->
-          Enum.at(options, num - 1)
-        _ ->
-          warning("Invalid selection. Please try again.")
-          select(message, options)
-      end
-    
-    selected
-  end
-  
-  @doc """
-  Prompts for confirmation.
-  """
-  def confirm(message, default \\ true) do
-    default_str = if default, do: "Y/n", else: "y/N"
-    response = IO.gets("#{message} [#{default_str}]: ")
+    input = IO.gets("\n#{@magenta}Select [1-#{length(options)}]: #{@reset}")
     |> String.trim()
-    |> String.downcase()
     
-    case response do
-      "" -> default
-      "y" -> true
-      "yes" -> true
-      "n" -> false
-      "no" -> false
-      _ -> 
-        warning("Please answer 'y' or 'n'.")
-        confirm(message, default)
+    case Integer.parse(input) do
+      {num, _} when num >= 1 and num <= length(options) ->
+        Enum.at(options, num - 1)
+      _ ->
+        warning("Invalid selection. Please try again.")
+        select(prompt, options)
     end
   end
 end 
