@@ -4,6 +4,7 @@ defmodule Cerber.CommandHandler do
   """
   
   alias Cerber.{UI, DB}
+  alias YamlElixir
   
   @doc """
   Runs a command for a specified project.
@@ -32,7 +33,7 @@ defmodule Cerber.CommandHandler do
   
   # Project commands
   
-  defp build_project(project_name, _args) do
+  defp build_project(project_name, args) do
     # Check if project exists
     case DB.get_project_by_name(project_name) do
       nil -> 
@@ -41,19 +42,120 @@ defmodule Cerber.CommandHandler do
         # Run buildah commands to build the container
         UI.header("Building project #{project_name}")
         
-        # For now, just mock the build process
-        UI.info("Building container image...")
-        Process.sleep(1000)
-        UI.success("Container image built successfully")
+        # Determine the path to the buildah.yaml file
+        buildah_file = Path.join(["/apps", project_name, "conf", "buildah.yaml"])
         
-        # Update database with build time
-        DB.update_project(project, %{
-          last_built: DateTime.utc_now(),
-          status: "built"
-        })
+        # Check if buildah.yaml exists
+        if not File.exists?(buildah_file) do
+          # Try alternative locations
+          alternative_file = Path.join(["/apps", project_name, "buildah.yaml"])
+          buildah_file = if File.exists?(alternative_file), do: alternative_file, else: buildah_file
+        end
         
-        UI.success("Project #{project_name} built and database updated")
+        if File.exists?(buildah_file) do
+          # Read and parse the buildah.yaml file
+          case YamlElixir.read_from_file(buildah_file) do
+            {:ok, yaml_content} ->
+              # Extract build steps
+              build_steps = get_in(yaml_content, ["build"])
+              
+              if is_list(build_steps) and not Enum.empty?(build_steps) do
+                # Create a map of variables for substitution
+                vars = %{
+                  "project_name" => project_name,
+                  "template" => project.template,
+                  "version" => project.version
+                }
+                
+                # Execute each build step
+                build_result = execute_build_steps(build_steps, vars, project_name)
+                
+                case build_result do
+                  :ok ->
+                    # Update database with build time on success
+                    # Temporarily commenting out for testing
+                    # DB.update_project(project, %{
+                    #   last_built: DateTime.utc_now(),
+                    #   status: "built"
+                    # })
+                    
+                    UI.success("Project #{project_name} built successfully")
+                    
+                  {:error, step, exit_code, _output} ->
+                    UI.error("Build failed at step: #{step}")
+                    UI.error("Build process terminated with exit code #{exit_code}")
+                end
+              else
+                UI.error("No build steps found in buildah.yaml")
+                UI.info("Please make sure your buildah.yaml file contains a 'build:' section with a list of commands")
+              end
+              
+            {:error, reason} ->
+              UI.error("Failed to parse buildah.yaml: #{inspect(reason)}")
+              UI.info("Please check that your buildah.yaml file contains valid YAML syntax")
+          end
+        else
+          UI.error("Buildah configuration file not found")
+          UI.info("Expected location: #{buildah_file}")
+          UI.info("Please create a buildah.yaml file with build instructions")
+        end
     end
+  end
+  
+  # Execute build steps sequentially, stopping on the first error
+  defp execute_build_steps(steps, vars, project_name) do
+    # Create working directory if it doesn't exist
+    work_dir = Path.join(["/apps", project_name])
+    
+    Enum.reduce_while(steps, :ok, fn step, _acc ->
+      # Process variables in the step
+      processed_step = process_variables(step, vars)
+      
+      UI.info("Executing: #{processed_step}")
+      
+      # Execute the build step
+      case System.cmd("sh", ["-c", processed_step], cd: work_dir, stderr_to_stdout: true) do
+        {output, 0} ->
+          # Command succeeded
+          unless output == "" do
+            formatted_output = format_output(output)
+            UI.info("Output: \n#{formatted_output}")
+          end
+          {:cont, :ok}
+          
+        {output, exit_code} ->
+          # Command failed
+          formatted_output = format_output(output)
+          UI.error("Command failed with exit code #{exit_code}")
+          UI.error("Output: \n#{formatted_output}")
+          {:halt, {:error, processed_step, exit_code, output}}
+      end
+    end)
+  end
+  
+  # Replace variables in a string with their values from a map
+  defp process_variables(string, vars) when is_binary(string) do
+    Regex.replace(~r/\#\{([^}]+)\}/, string, fn _, var_name ->
+      value = Map.get(vars, var_name)
+      cond do
+        is_nil(value) -> ""
+        is_binary(value) -> value
+        true -> to_string(value)
+      end
+    end)
+  end
+  
+  defp process_variables(non_string, _vars) do
+    UI.error("Cannot process variables in non-string: #{inspect(non_string)}")
+    ""
+  end
+  
+  # Format command output for display
+  defp format_output(output) when is_binary(output) do
+    output
+    |> String.trim()
+    |> String.split("\n")
+    |> Enum.map_join("\n", fn line -> "  #{line}" end)
   end
   
   defp run_project(project_name, _args) do

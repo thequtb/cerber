@@ -91,13 +91,13 @@ defmodule Cerber.Template do
   end
 
   # Interactive template selection
-  defp select_template do
+  def select_template do
     UI.select("Select a template", @templates)
   end
 
   # Prompt for project name
-  defp prompt_project_name(template) do
-    name = UI.prompt("Enter project name", "my_#{template}_project")
+  def prompt_project_name(template) do
+    name = UI.prompt_with_default("Enter project name", "my_#{template}_project")
     
     # Check if the project name already exists
     case DB.get_project_by_name(name) do
